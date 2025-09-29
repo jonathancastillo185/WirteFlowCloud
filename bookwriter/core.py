@@ -1,23 +1,21 @@
 import json
 import re
 from datetime import datetime
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Generator, Union, List
+import time
 
-# Importar configuraciones y cliente de Groq
+# Importar configuraciones y funciones
 from .config import (
     PROJECTS_PATH, MODEL, groq_client,
     TEMPERATURE, MAX_TOKENS, TOP_P, STOP_SEQUENCES
 )
 from .pdf_exporter import export_book_to_pdf
 from .semantic_memory import SemanticMemory
+from .image_generator import generate_image_with_stability
 
 class BookWriter:
-    """
-    Sistema de escritura de libros con memoria persistente y semántica para mantener
-    una consistencia absoluta en la narrativa.
-    """
-
-    def __init__(self, project_name: str, author_style: str = "neutral"):
+    # --- FUNCIÓN __INIT__ MODIFICADA ---
+    def __init__(self, project_name: str, author_style: Union[str, List[str]] = "neutral"):
         self.project_name = self._sanitize_name(project_name)
         self.project_path = PROJECTS_PATH / self.project_name
         self.project_path.mkdir(exist_ok=True)
@@ -26,230 +24,218 @@ class BookWriter:
         self.memory_file = self.project_path / 'memory.json'
         self.book_file = self.project_path / 'book.md'
         self.pdf_file = self.project_path / f'{self.project_name}.pdf'
+        self.cover_file = self.project_path / 'cover.png'
         
         self.semantic_memory = SemanticMemory(self.project_path)
 
-        # Estructura de la memoria
-        self.memory = self._get_initial_memory(project_name, author_style)
+        # Convertir la lista de autores a un string si es necesario
+        style_str = ", ".join(author_style) if isinstance(author_style, list) else author_style
+        
+        self.memory = self._get_initial_memory(project_name, style_str)
         self.load_memory()
 
     def _get_initial_memory(self, project_name, author_style):
-        """Devuelve la estructura inicial para el archivo de memoria JSON."""
+        # ... (el resto del archivo no necesita cambios)
         return {
             "metadata": {
-                "title": project_name,
-                "author_style": author_style,
-                "created": datetime.now().isoformat(),
-                "model": MODEL
+                "title": project_name, "author_style": author_style,
+                "created": datetime.now().isoformat(), "model": MODEL,
+                "blurb": "", "cover_prompt": ""
             },
-            "world": {},
-            "characters": {},
+            "world": {}, "characters": {},
             "plot": {"outline": [], "premise": "", "themes": []},
-            "style": {},
-            "chapters_summary": [],
-            "consistency_rules": [],
-            "writing_progress": {
-                "current_chapter_index": 0,
-                "current_page_in_chapter": 0
-            }
+            "style": {}, "chapters_summary": [], "consistency_rules": [],
+            "writing_progress": {"current_chapter_index": 0, "current_page_in_chapter": 0}
         }
-
+    
     def _sanitize_name(self, name: str) -> str:
-        """Limpia un nombre para que sea seguro como nombre de directorio."""
         sanitized_name = re.sub(r'[^a-zA-Z0-9_-]', '_', name).strip()
-        sanitized_name = re.sub(r'_+', '_', sanitized_name)
-        return sanitized_name
+        return re.sub(r'_+', '_', sanitized_name)
 
     def save_memory(self):
-        """Guarda el estado actual de la memoria en el archivo JSON."""
         with open(self.memory_file, 'w', encoding='utf-8') as f:
             json.dump(self.memory, f, ensure_ascii=False, indent=4)
 
     def load_memory(self):
-        """Carga la memoria desde el archivo JSON si existe."""
         if self.memory_file.exists():
             with open(self.memory_file, 'r', encoding='utf-8') as f:
                 try:
-                    self.memory = json.load(f)
+                    loaded_memory = json.load(f)
+                    loaded_memory.setdefault('metadata', {}).setdefault('blurb', "")
+                    loaded_memory.setdefault('metadata', {}).setdefault('cover_prompt', "")
+                    self.memory = loaded_memory
                 except json.JSONDecodeError:
                     print(f"Advertencia: El archivo memory.json para {self.project_name} está corrupto.")
 
     def _build_consistency_prompt(self) -> str:
-        """Construye un prompt de sistema con la información clave del libro para mantener la consistencia."""
         plot_data = self.memory.get('plot', {})
-        premise = plot_data.get('premise', 'No especificada')
-        themes = ', '.join(plot_data.get('themes', []))
-
         return f"""Eres un escritor experto en el estilo de {self.memory.get('metadata', {}).get('author_style', 'neutral')}.
-Tu tarea es escribir una novela manteniendo una consistencia absoluta con la información proporcionada.
+Tu tarea es escribir una novela manteniendo una consistencia absoluta.
 Respeta los detalles del mundo, las personalidades de los personajes y la trama establecida.
-NO inventes detalles que contradigan la memoria del libro.
 ---
 **Título:** {self.memory.get('metadata', {}).get('title', 'Sin Título')}
-**Premisa:** {premise}
-**Temas:** {themes}
+**Premisa:** {plot_data.get('premise', 'No especificada')}
+**Temas:** {', '.join(plot_data.get('themes', []))}
 ---"""
 
     def _call_groq(self, user_prompt: str) -> str:
-        """Llama a la API de Groq con el contexto completo y los parámetros configurados."""
-        try:
-            system_prompt = self._build_consistency_prompt()
-            response = groq_client.chat.completions.create(
-                model=MODEL,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=TEMPERATURE,
-                max_tokens=MAX_TOKENS,
-                top_p=TOP_P,
-                stop=STOP_SEQUENCES
-            )
-            return response.choices[0].message.content
-        except Exception as e:
-            print(f"❌ Error en la llamada a Groq: {e}")
-            return f"Error en la llamada a Groq: {e}"
+        max_retries = 5
+        for attempt in range(max_retries):
+            try:
+                system_prompt = self._build_consistency_prompt()
+                response = groq_client.chat.completions.create(
+                    model=MODEL,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    temperature=TEMPERATURE, max_tokens=MAX_TOKENS,
+                    top_p=TOP_P, stop=STOP_SEQUENCES
+                )
+                return response.choices[0].message.content
+            except Exception as e:
+                if "429" in str(e) and "rate_limit_exceeded" in str(e):
+                    wait_match = re.search(r"Please try again in ([\d.]+)s", str(e))
+                    if wait_match:
+                        wait_seconds = float(wait_match.group(1)) + 1
+                        print(f"🔶 Límite de tasa alcanzado. Esperando {wait_seconds:.2f} segundos...")
+                        time.sleep(wait_seconds)
+                        continue
+                print(f"❌ Error en la llamada a Groq (intento {attempt + 1}/{max_retries}): {e}")
+                if attempt + 1 == max_retries:
+                    return f"Error en la llamada a Groq tras {max_retries} intentos: {e}"
+        return f"Error: No se pudo completar la llamada a Groq tras {max_retries} reintentos."
 
     def generate_outline(self, premise: str, num_chapters: int, themes: str):
-        """Genera el outline, mundo y personajes iniciales y los guarda en la memoria."""
         self.memory['plot']['premise'] = premise
         self.memory['plot']['themes'] = [theme.strip() for theme in themes.split(',')]
-        
         prompt = f"""
 Basado en la siguiente premisa, temas y estilo, genera un outline detallado para una novela de {num_chapters} capítulos.
-
 **Premisa:** {premise}
 **Temas:** {themes}
-**Estilo de Autor Sugerido:** {self.memory['metadata']['author_style']}
-
-Tu respuesta DEBE ser un único bloque de código JSON válido. No incluyas texto antes o después del JSON.
-La estructura debe ser la siguiente:
+**Estilo Sugerido:** {self.memory['metadata']['author_style']}
+Tu respuesta DEBE ser un único JSON válido con la siguiente estructura:
 {{
-    "world": {{
-        "setting": "Descripción detallada del mundo y la atmósfera.",
-        "time_period": "Época o período en que transcurre la historia.",
-        "key_locations": {{ "Nombre del Lugar": "Descripción breve" }},
-        "rules_of_the_world": ["Regla 1 del universo", "Regla 2 del universo"]
-    }},
-    "characters": {{
-        "Nombre del Personaje": {{
-            "description": "Descripción física y de apariencia.",
-            "personality": "Personalidad, motivaciones y miedos.",
-            "story_arc": "Cómo evoluciona el personaje a lo largo de la historia.",
-            "relationships": "Relaciones clave con otros personajes."
-        }}
-    }},
-    "style": {{
-        "tone": "Tono general de la narrativa (ej. sombrío, optimista, cínico).",
-        "point_of_view": "Punto de vista (ej. Primera persona, Tercera persona limitada).",
-        "tense": "Tiempo verbal predominante (ej. Pasado, Presente)."
-    }},
-    "plot": {{
-        "outline": [
-            {{
-                "number": 1,
-                "title": "Título del Capítulo",
-                "summary": "Resumen detallado de lo que sucede en este capítulo.",
-                "key_events": ["Evento importante 1", "Evento importante 2"],
-                "character_focus": ["Personaje principal del capítulo"],
-                "pages_estimate": 10
-            }}
-        ]
-    }},
-    "consistency_rules": ["Regla de consistencia 1 para la IA", "Regla 2"]
+    "world": {{"setting": "...", "time_period": "...", "key_locations": {{}}, "rules_of_the_world": []}},
+    "characters": {{"Nombre": {{"description": "...", "personality": "...", "story_arc": "...", "relationships": "..."}}}},
+    "style": {{"tone": "...", "point_of_view": "...", "tense": "..."}},
+    "plot": {{"outline": [{{"number": 1, "title": "...", "summary": "...", "key_events": [], "character_focus": [], "pages_estimate": 10}}]}},
+    "consistency_rules": []
 }}
 """
         response = self._call_groq(prompt)
-        
         try:
-            json_str = response.strip().replace("```json", "").replace("```", "")
-            data = json.loads(json_str)
-
-            self.memory['world'] = data.get('world', {})
-            self.memory['characters'] = data.get('characters', {})
-            self.memory['style'] = data.get('style', {})
-            self.memory['consistency_rules'] = data.get('consistency_rules', [])
-            
-            plot_from_llm = data.get('plot', {})
-            self.memory['plot']['outline'] = plot_from_llm.get('outline', [])
-            
+            data = json.loads(response.strip().replace("```json", "").replace("```", ""))
+            self.memory.update(data)
+            self.memory['plot']['outline'] = data.get('plot', {}).get('outline', [])
             for char_name, char_data in self.memory['characters'].items():
                 char_data['current_state'] = "Al inicio de la historia."
-            
             self.save_memory()
             return "✅ Outline, mundo y personajes generados con éxito."
-        except json.JSONDecodeError as e:
-            print(f"❌ Error al procesar la respuesta del modelo: {e}")
-            return f"❌ Error al procesar la respuesta del modelo: {e}\n\nRespuesta recibida:\n{response[:500]}..."
         except Exception as e:
-            print(f"❌ Error inesperado al generar el outline: {e}")
-            return f"❌ Error inesperado: {e}"
+            return f"❌ Error al procesar la respuesta del modelo: {e}\nRespuesta recibida:\n{response[:500]}..."
+
+    def generate_book_blurb(self) -> str:
+        print("Generando resumen del libro...")
+        metadata = self.memory.get('metadata', {})
+        plot_data = self.memory.get('plot', {})
+        prompt = f"""
+Actúa como un editor experto. Escribe un resumen de contraportada (blurb) intrigante y comercial para la novela.
+- **Título:** {metadata.get('title', 'Sin Título')}
+- **Estilo:** {metadata.get('author_style', 'neutral')}
+- **Premisa:** {plot_data.get('premise', '')}
+- **Temas:** {', '.join(plot_data.get('themes', []))}
+**Instrucciones:** Tono acorde al género. No reveles el final. 150-200 palabras. Responde solo con el texto del resumen.
+"""
+        blurb = self._call_groq(prompt)
+        self.memory['metadata']['blurb'] = blurb
+        self.save_memory()
+        return blurb
+
+    def generate_cover_art(self) -> tuple[str | None, str, str]:
+        print("✍️ Generando prompt artístico para la portada...")
+        metadata = self.memory.get('metadata', {})
+        if not metadata.get('blurb'):
+            self.generate_book_blurb()
+            metadata['blurb'] = self.memory['metadata']['blurb']
+        prompt_for_prompt = f"""
+Actúa como un director de arte. Escribe un prompt detallado para un modelo de IA de texto a imagen.
+- **Título:** {metadata.get('title', 'Sin Título')}
+- **Estilo:** {metadata.get('author_style', 'neutral')}
+- **Resumen:** {metadata.get('blurb', '')}
+- **Temas:** {', '.join(self.memory.get('plot', {}).get('themes', []))}
+**Instrucciones:** Describe la escena, personajes, atmósfera, estilo, iluminación y colores. Usa adjetivos potentes. Solo el prompt como respuesta.
+Ejemplo: "Pintura digital épica de un astronauta solitario al borde de un cañón marciano bajo un cielo carmesí. Estilo cinematográfico, alta resolución."
+"""
+        cover_prompt = self._call_groq(prompt_for_prompt)
+        self.memory['metadata']['cover_prompt'] = cover_prompt
+        self.save_memory()
+        image_path, status = generate_image_with_stability(cover_prompt, str(self.cover_file))
+        return image_path, cover_prompt, status
+    
+    def write_full_book(self) -> Generator[Tuple[float, str], None, None]:
+        total_pages = sum(chap.get('pages_estimate', 10) for chap in self.memory.get('plot', {}).get('outline', []))
+        pages_written = 0
+        status_dict = self.get_status()
+        current_chap_idx = status_dict.get('current_chapter_number', 1) - 1
+        if current_chap_idx > 0:
+            pages_written = sum(self.memory['plot']['outline'][i].get('pages_estimate', 10) for i in range(current_chap_idx))
+        pages_written += status_dict.get('current_page', 1) - 1
+        
+        while not self.get_status().get('completed', False):
+            status_dict = self.get_status()
+            progress_message = f"Escribiendo pág. {status_dict.get('current_page')}/{status_dict.get('pages_in_chapter')} del Cap. {status_dict.get('current_chapter_number')}..."
+            status, _ = self.generate_page()
+            if "Error" in status:
+                yield (pages_written / total_pages, f"❌ Error: {status}")
+                return
+            pages_written += 1
+            yield (pages_written / total_pages, progress_message)
+        yield (1.0, "✅ ¡Libro completado!")
 
     def generate_page(self) -> Tuple[str, str]:
-        """Genera la siguiente página del libro basándose en el progreso actual."""
         progress = self.memory.get('writing_progress', {})
-        current_chapter_index = progress.get('current_chapter_index', 0)
-        
         outline = self.memory.get('plot', {}).get('outline', [])
+        current_chapter_index = progress.get('current_chapter_index', 0)
         if not outline or current_chapter_index >= len(outline):
-            return "✅ ¡Libro completado! Ya puedes exportarlo a PDF.", ""
-
+            return "✅ ¡Libro completado!", ""
+        
         chapter_info = outline[current_chapter_index]
         page_in_chapter = progress.get('current_page_in_chapter', 0) + 1
         total_pages = chapter_info.get('pages_estimate', 10)
-
-        # --- MEJORA DE CONSISTENCIA DE PERSONAJES ---
-        character_focus_str = "No hay personajes específicos en foco para esta sección."
-        focused_characters = chapter_info.get('character_focus', [])
-        if focused_characters:
-            char_profiles = []
-            for char_name in focused_characters:
-                char_data = self.memory.get('characters', {}).get(char_name)
-                if char_data:
-                    profile = f"- **{char_name}:** {char_data.get('description', '')} Personalidad: {char_data.get('personality', '')} Estado actual: {char_data.get('current_state', '')}"
-                    char_profiles.append(profile)
-            if char_profiles:
-                character_focus_str = "\n".join(char_profiles)
+        
+        char_profiles = [f"- **{name}:** {self.memory.get('characters',{}).get(name,{}).get('description','')} Personalidad: {self.memory.get('characters',{}).get(name,{}).get('personality','')} Estado: {self.memory.get('characters',{}).get(name,{}).get('current_state','')}" for name in chapter_info.get('character_focus', [])]
+        character_focus_str = "\n".join(char_profiles) if char_profiles else "No hay personajes específicos en foco."
         
         last_written_text = ""
         if self.book_file.exists():
-            with open(self.book_file, 'r', encoding='utf-8') as f:
-                last_written_text = f.read()[-1500:]
-
+            with open(self.book_file, 'r', encoding='utf-8') as f: last_written_text = f.read()[-1500:]
+        
         query = last_written_text or chapter_info.get('summary', '')
         relevant_context = self.semantic_memory.search_relevant_context(query)
-
-        # --- PROMPT REFORZADO Y SIMPLIFICADO ---
+        
         prompt = f"""
-**REGLAS CRÍTICAS E INELUDIBLES:**
-1.  **FIDELIDAD ABSOLUTA A LOS PERSONAJES:** Usa los perfiles de personaje proporcionados en el Punto 1 de forma EXACTA. Es obligatorio que uses sus nombres, descripciones y personalidades tal como se definen. NO puedes inventar ni cambiar estos detalles bajo ninguna circunstancia.
-2.  **NO REPETIR:** No repitas nada del "ÚLTIMO FRAGMENTO ESCRITO". Tu texto debe ser una continuación directa.
-
+**REGLAS CRÍTICAS:**
+1. **FIDELIDAD ABSOLUTA A LOS PERSONAJES:** Usa los perfiles del Punto 1 EXACTAMENTE. NO puedes cambiar nombres o personalidades.
+2. **NO REPETIR:** Continúa la historia desde el "ÚLTIMO FRAGMENTO ESCRITO".
 ---
-
-**1. PERFILES DE PERSONAJES EN FOCO PARA ESTA ESCENA:**
+**1. PERFILES DE PERSONAJES:**
 {character_focus_str}
-
-**2. RESUMEN DEL CAPÍTULO ACTUAL (Nº {chapter_info.get('number', 'N/A')}: "{chapter_info.get('title', 'Sin Título')}")**:
+**2. RESUMEN DEL CAPÍTULO (Nº {chapter_info.get('number', 'N/A')}: "{chapter_info.get('title', 'Sin Título')}")**:
 {chapter_info.get('summary', '')}
-
-**3. CONTEXTO DE CAPÍTULOS ANTERIORES (MEMORIA A LARGO PLAZO):**
+**3. CONTEXTO DE CAPÍTULOS ANTERIORES:**
 {relevant_context}
-
-**4. ÚLTIMO FRAGMENTO ESCRITO (MEMORIA A CORTO PLAZO):**
+**4. ÚLTIMO FRAGMENTO ESCRITO:**
 ...{last_written_text}
-
 ---
-
-**TU TAREA:**
-Continúa la novela desde el final del "ÚLTIMO FRAGMENTO ESCRITO". Asegúrate de seguir las REGLAS CRÍTICAS y de avanzar en la trama descrita en el RESUMEN DEL CAPÍTULO. Escribe aproximadamente 400-500 palabras de narrativa fluida y coherente. No incluyas un título de capítulo en tu respuesta; el programa lo añadirá por ti.
+**TU TAREA:** Continúa la novela desde el final del "ÚLTIMO FRAGMENTO ESCRITO". Sigue las REGLAS y la trama. Escribe 400-500 palabras. No incluyas un título.
 """
         page_content = self._call_groq(prompt)
+        if "Error" in page_content:
+            return page_content, ""
 
-        # --- GESTIÓN CENTRALIZADA DE TÍTULOS ---
         with open(self.book_file, 'a', encoding='utf-8') as f:
             if page_in_chapter == 1:
-                # El código se encarga de escribir el título, no la IA.
                 f.write(f"\n\n## Capítulo {chapter_info.get('number', 'N/A')}: {chapter_info.get('title', 'Sin Título')}\n\n")
             f.write(f"{page_content}\n")
         
@@ -260,119 +246,66 @@ Continúa la novela desde el final del "ÚLTIMO FRAGMENTO ESCRITO". Asegúrate d
             self.memory['writing_progress']['current_page_in_chapter'] = 0
         else:
             self.memory['writing_progress']['current_page_in_chapter'] = page_in_chapter
-
         self.save_memory()
-        status = f"✅ Página {page_in_chapter}/{total_pages} del Cap. {chapter_info.get('number', 'N/A')} generada."
-        return status, page_content
+        return f"✅ Página {page_in_chapter}/{total_pages} del Cap. {chapter_info.get('number', 'N/A')} generada.", page_content
 
     def _process_completed_chapter(self, chapter_info: dict):
-        """Extrae el texto del capítulo recién completado y lo añade a la memoria semántica."""
-        print(f"Finalizando capítulo {chapter_info.get('number', 'N/A')}. Indexando para memoria a largo plazo...")
+        print(f"Finalizando capítulo {chapter_info.get('number', 'N/A')}. Indexando...")
         try:
             full_book_content = self.book_file.read_text(encoding='utf-8')
             chapter_header = f"## Capítulo {chapter_info.get('number', 'N/A')}: {chapter_info.get('title', 'Sin Título')}"
-            
-            next_chapter_index = chapter_info.get('number', 0)
-            next_chapter_header_pattern = re.compile(rf"## Capítulo {next_chapter_index + 1}:")
-
+            next_chap_num = chapter_info.get('number', 0) + 1
+            next_chap_header = re.compile(rf"## Capítulo {next_chap_num}:")
             start_index = full_book_content.rfind(chapter_header)
-            if start_index == -1:
-                print(f"ADVERTENCIA: No se encontró el encabezado para el capítulo {chapter_info.get('number', 'N/A')}.")
-                return
-
-            match = next_chapter_header_pattern.search(full_book_content, start_index)
-            if match:
-                end_index = match.start()
-                chapter_text = full_book_content[start_index:end_index]
-            else:
-                chapter_text = full_book_content[start_index:]
-            
+            if start_index == -1: return
+            match = next_chap_header.search(full_book_content, start_index)
+            chapter_text = full_book_content[start_index:match.start()] if match else full_book_content[start_index:]
             self.semantic_memory.add_chapter(chapter_info.get('number', 0), chapter_text)
-
         except Exception as e:
-            print(f"❌ Error al procesar el capítulo completado para la memoria semántica: {e}")
+            print(f"❌ Error al procesar capítulo para memoria semántica: {e}")
 
     def _update_after_chapter_completion(self, chapter_info, full_chapter_content):
-        """Pide a la IA que actualice el estado de los personajes tras un capítulo."""
         prompt = f"""
-Analiza el siguiente contenido del capítulo "{chapter_info.get('title', 'Sin Título')}" que acaba de terminar.
-Basado en los eventos que ocurrieron, describe el nuevo estado (emocional, físico, situacional)
-para cada uno de los personajes principales que aparecieron.
-
-Contenido del capítulo:
----
-{full_chapter_content[-2000:]}
----
-
-Responde en un único bloque de código JSON, con la siguiente estructura:
-{{
-    "character_updates": {{
-        "Nombre del Personaje 1": "Nuevo estado tras este capítulo.",
-        "Nombre del Personaje 2": "Nuevo estado tras este capítulo."
-    }}
-}}
+Analiza el contenido del capítulo "{chapter_info.get('title', 'Sin Título')}" y describe el nuevo estado de los personajes.
+Contenido: --- {full_chapter_content[-2000:]} ---
+Responde en JSON: {{"character_updates": {{"Nombre": "Nuevo estado."}}}}
 """
         response = self._call_groq(prompt)
         try:
-            json_str = response.strip().replace("```json", "").replace("```", "")
-            data = json.loads(json_str)
+            data = json.loads(response.strip().replace("```json", "").replace("```", ""))
             updates = data.get("character_updates", {})
-            for char_name, new_state in updates.items():
-                if char_name in self.memory.get('characters', {}):
-                    self.memory['characters'][char_name]['current_state'] = new_state
-                    print(f"🔄 Estado de '{char_name}' actualizado a: {new_state}")
+            for char, state in updates.items():
+                if char in self.memory.get('characters', {}):
+                    self.memory['characters'][char]['current_state'] = state
+                    print(f"🔄 Estado de '{char}' actualizado a: {state}")
         except Exception as e:
-            print(f"⚠️ No se pudo actualizar el estado de los personajes: {e}")
-        
-        summary = {
-            "number": chapter_info.get('number', 0),
-            "title": chapter_info.get('title', 'Sin Título'),
-            "summary": chapter_info.get('summary', '')
-        }
-        if 'chapters_summary' not in self.memory:
-            self.memory['chapters_summary'] = []
-        self.memory['chapters_summary'].append(summary)
-
+            print(f"⚠️ No se pudo actualizar estado de personajes: {e}")
+        summary = {"number": chapter_info.get('number',0), "title": chapter_info.get('title',''), "summary": chapter_info.get('summary','')}
+        self.memory.setdefault('chapters_summary', []).append(summary)
 
     def export_to_pdf(self) -> str:
-        """Exporta el manuscrito a un archivo PDF."""
-        return export_book_to_pdf(
-            pdf_path=str(self.pdf_file),
-            book_file_path=str(self.book_file),
-            metadata=self.memory.get('metadata', {}),
-            chapters=self.memory.get('chapters_summary', [])
-        )
-
+        if not self.memory.get('metadata', {}).get('blurb'):
+            self.generate_book_blurb()
+        return export_book_to_pdf(pdf_path=str(self.pdf_file), book_file_path=str(self.book_file), memory=self.memory)
+    
     def get_status(self) -> dict:
-        """Obtiene un diccionario con el estado actual del proyecto."""
         progress = self.memory.get('writing_progress', {})
-        total_chapters = len(self.memory.get('plot', {}).get('outline', []))
-        current_chapter_idx = progress.get('current_chapter_index', 0)
+        outline = self.memory.get('plot', {}).get('outline', [])
+        total_chapters = len(outline)
+        current_idx = progress.get('current_chapter_index', 0)
+        if total_chapters == 0: return {"message": "Aún no se ha generado un outline."}
+        is_completed = current_idx >= total_chapters
+        info = outline[current_idx] if not is_completed else {"number": "N/A", "title": "Libro completado"}
+        page, total_pages = (progress.get('current_page_in_chapter', 0) + 1, info.get('pages_estimate', 10)) if not is_completed else (0, 0)
         
-        if total_chapters == 0:
-            return { "message": "Aún no se ha generado un outline para este proyecto."}
-        
-        is_completed = current_chapter_idx >= total_chapters
-        
-        if is_completed:
-            current_chapter_info = {"number": "N/A", "title": "Libro completado"}
-            page_in_chapter = 0
-            pages_in_chapter = 0
-        else:
-            current_chapter_info = self.memory['plot']['outline'][current_chapter_idx]
-            page_in_chapter = progress.get('current_page_in_chapter', 0) + 1
-            pages_in_chapter = current_chapter_info.get('pages_estimate', 10)
-
+        status_data = self.memory.get('metadata',{})
         return {
-            "title": self.memory.get('metadata', {}).get('title', 'Sin Título'),
-            "style": self.memory.get('metadata', {}).get('author_style', 'neutral'),
-            "total_chapters": total_chapters,
-            "current_chapter_number": current_chapter_info.get('number'),
-            "current_chapter_title": current_chapter_info.get('title'),
-            "current_page": page_in_chapter,
-            "pages_in_chapter": pages_in_chapter,
-            "characters": len(self.memory.get('characters', {})),
-            "completed": is_completed,
-            "ollama_status": self.semantic_memory.is_available
+            "title": status_data.get('title',''), "style": status_data.get('author_style',''),
+            "total_chapters": total_chapters, "current_chapter_number": info.get('number'),
+            "current_chapter_title": info.get('title'), "current_page": page,
+            "pages_in_chapter": total_pages, "characters": len(self.memory.get('characters',{})),
+            "completed": is_completed, "ollama_status": self.semantic_memory.is_available,
+            "blurb": status_data.get('blurb',''), "cover_prompt": status_data.get('cover_prompt',''),
+            "cover_path": str(self.cover_file) if self.cover_file.exists() else None
         }
 

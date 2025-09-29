@@ -1,85 +1,83 @@
-📚 BookWriter AI - Asistente de Escritura Local con Memoria a Largo Plazo
+📚 BookWriter AI - Asistente de Escritura Local
 
-BookWriter AI es una aplicación de escritorio construida con Python y Gradio que te permite escribir novelas y libros largos con la ayuda de modelos de lenguaje de última generación a través de la API de Groq.
+BookWriter AI es una aplicación de escritorio que utiliza el poder de los grandes modelos de lenguaje (LLMs) para ayudarte a escribir novelas completas, manteniendo una coherencia profunda en la trama y los personajes de principio a fin.
 
-Su característica principal es un sistema de memoria dual:
+El sistema combina la velocidad de la API de Groq para la generación de texto, una memoria semántica local con Ollama y FAISS para la coherencia a largo plazo, y la API de Stability AI para generar portadas únicas para tus libros.
+✨ Características
 
-    Memoria a Corto Plazo: Recuerda lo último que se escribió para una continuidad fluida.
+    Generación de Outlines Detallados: Proporciona una premisa y la IA creará una estructura completa para tu libro, incluyendo el mundo, los personajes y un resumen de cada capítulo.
 
-    Memoria a Largo Plazo (Semántica): Utiliza embeddings vectoriales y una base de datos local (FAISS) gestionada por Ollama para recordar detalles clave de toda la novela, garantizando una consistencia profunda en tramas complejas y arcos de personajes largos.
+    Memoria a Largo Plazo: Utiliza embeddings vectoriales para "recordar" detalles de capítulos anteriores, asegurando que los personajes y la trama se mantengan consistentes.
 
-Características
+    Escritura Asistida: Genera el libro página por página o ponlo en "piloto automático" para que escriba todo el libro por ti.
 
-    Interfaz Gráfica Sencilla: Gestiona tus proyectos, genera contenido y visualiza tu libro, todo desde una interfaz web local.
+    Creación de Resúmenes: Genera automáticamente un resumen de contraportada (blurb) atractivo y comercial.
 
-    Generación de Outlines: Proporciona una premisa y la IA diseñará la estructura completa de tu libro, incluyendo el mundo, los personajes y un resumen de cada capítulo.
+    Generación de Portadas con IA: Crea una portada única y artística para tu libro basada en su contenido.
 
-    Escritura Asistida por IA: Genera el libro página por página, manteniendo siempre el contexto y la coherencia.
+    Exportación Profesional: Exporta tu manuscrito a un PDF con formato de e-book, incluyendo portada, índice de contenidos interactivo y resumen.
 
-    Memoria Semántica Local: Gracias a Ollama, el sistema comprende el contenido de los capítulos ya escritos y utiliza esa información para guiar la escritura de los nuevos, evitando contradicciones.
+    Totalmente Local y Privado: La memoria semántica y la generación de embeddings se ejecutan en tu propia máquina gracias a Ollama, garantizando tu privacidad.
 
-    Configuración Flexible: Controla qué modelo de Groq usar y ajusta sus parámetros (temperatura, top_p, etc.) directamente desde un archivo .env.
-
-    Exportación a PDF: Convierte tu manuscrito en un PDF listo para compartir.
-
-    Privacidad: Todo tu trabajo y la memoria semántica se guardan localmente en tu computadora.
-
-🛠️ Instalación y Configuración
+🛠️ Instalación
 
 Sigue estos pasos para poner en marcha el proyecto en tu máquina local.
-Paso 1: Requisitos Previos (Instalar Ollama)
+Prerrequisitos
 
-La memoria a largo plazo de esta aplicación depende de Ollama. Debes instalarlo primero.
+Necesitas tener Python 3.10 o superior y Git instalados en tu sistema.
+1. Clonar el Repositorio
 
-    Descarga Ollama: Ve a ollama.com y descarga la aplicación para tu sistema operativo (macOS, Linux, Windows).
+Abre una terminal y clona este repositorio:
 
-    Inicia Ollama: Una vez instalado, asegúrate de que la aplicación de Ollama esté en ejecución. Deberías ver un ícono en tu barra de tareas o menú.
+git clone <URL_DEL_REPOSITORIO>
+cd BookWriter_Groq_Local
 
-    Descarga el Modelo de Embeddings: Abre una terminal o línea de comandos y ejecuta el siguiente comando. Este modelo es el "cerebro" que permitirá a la aplicación entender el significado de tu libro.
+2. Crear un Entorno Virtual
+
+Es altamente recomendable usar un entorno virtual para aislar las dependencias del proyecto.
+
+python -m venv env
+source env/bin/activate  # En Windows: env\Scripts\activate
+
+3. Instalar Dependencias de Python
+
+Instala todas las librerías necesarias con un solo comando:
+
+pip install -r requirements.txt
+
+4. Configurar Ollama (Para la Memoria a Largo Plazo)
+
+Ollama es el motor que nos permite ejecutar modelos de embeddings localmente. Es crucial para la coherencia del libro.
+
+    Descarga e Instala Ollama: Ve a ollama.com y descarga la aplicación para tu sistema operativo (macOS, Linux, Windows).
+
+    Ejecuta Ollama: Asegúrate de que la aplicación de Ollama esté en ejecución en segundo plano.
+
+    Descarga el Modelo de Embeddings: Abre tu terminal y ejecuta el siguiente comando para descargar el modelo que usaremos para la memoria semántica:
 
     ollama pull snowflake-arctic-embed:335m
 
-    La descarga tardará unos minutos. Una vez completada, puedes dejar Ollama corriendo en segundo plano.
+5. Configurar las Claves de API
 
-Paso 2: Clonar el Repositorio
+El proyecto necesita claves de API para funcionar.
 
-git clone [https://github.com/tu_usuario/BookWriter_Groq_Local.git](https://github.com/tu_usuario/BookWriter_Groq_Local.git)
-cd BookWriter_Groq_Local
+    Crea el archivo .env: Renombra el archivo .env.example a .env.
 
-Paso 3: Crear un Entorno Virtual y Instalar Dependencias
+    mv .env.example .env
 
-Es una buena práctica usar un entorno virtual para aislar las dependencias del proyecto.
+    Añade tus claves: Abre el archivo .env con un editor de texto y pega tus claves de API:
 
-# Crear un entorno virtual
-python3 -m venv env
+        GROQ_API_KEY: Obligatoria. Consíguela registrándote en GroqCloud.
 
-# Activar el entorno virtual
-# En macOS / Linux:
-source env/bin/activate
-# En Windows:
-.\env\Scripts\activate
+        STABILITY_API_KEY: Opcional. Necesaria solo si quieres generar portadas. Consíguela registrándote en Stability AI Platform.
 
-# Instalar las librerías necesarias
-pip install -r requirements.txt
+🚀 Cómo Usar la Aplicación
 
-Paso 4: Configurar tus Variables de Entorno
+Una vez que todo esté instalado y configurado, ¡lanzar la aplicación es muy fácil!
 
-    Crea tu API Key de Groq: Ve a console.groq.com/keys y crea una nueva clave de API.
+    Asegúrate de que tu entorno virtual esté activado y que Ollama esté en ejecución.
 
-    Configura el archivo .env:
+    Desde la raíz del proyecto, ejecuta el siguiente comando:
 
-        Renombra el archivo .env.example a .env.
+    python app.py
 
-        Abre el archivo .env y pega tu clave de API de Groq donde se indica.
-
-        Puedes ajustar opcionalmente los otros parámetros del modelo si lo deseas.
-
-▶️ Ejecución de la Aplicación
-
-Con Ollama corriendo en segundo plano y tu entorno virtual activado, inicia la aplicación con el siguiente comando:
-
-python app.py
-
-Abre tu navegador web y ve a la dirección URL que aparece en la terminal (normalmente http://127.0.0.1:7860).
-
-¡Y listo! Ya puedes empezar a crear tu próxima gran novela.

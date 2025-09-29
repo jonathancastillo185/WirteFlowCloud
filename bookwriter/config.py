@@ -1,36 +1,33 @@
 import os
-from pathlib import Path
 from dotenv import load_dotenv
 from groq import Groq
+from pathlib import Path
 
 # Cargar variables de entorno desde el archivo .env
 load_dotenv()
 
-# --- Configuración de la API de Groq ---
+# --- Claves de API ---
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-if not GROQ_API_KEY:
-    raise ValueError("No se encontró la variable de entorno GROQ_API_KEY. "
-                     "Por favor, crea un archivo .env y añade tu clave.")
-
-# Cliente de Groq reutilizable
-groq_client = Groq(api_key=GROQ_API_KEY)
-
-# --- Modelo de Lenguaje y Configuración ---
-# Se obtienen del entorno para mayor flexibilidad.
-# Si no se definen en el archivo .env, se usan valores por defecto razonables.
-MODEL = os.getenv("MODEL_NAME", "llama-3.1-70b-versatile")
-TEMPERATURE = float(os.getenv("TEMPERATURE", 0.75))
-MAX_TOKENS = int(os.getenv("MAX_TOKENS", 4096))
-TOP_P = float(os.getenv("TOP_P", 0.9))
-STOP_SEQUENCES = os.getenv("STOP_SEQUENCES", "\n\n").split(",")
+STABILITY_API_KEY = os.getenv("STABILITY_API_KEY")
 
 # --- Rutas del Proyecto ---
-# Ruta base del proyecto
+# Define la ruta base del proyecto y el directorio para guardar los libros
 BASE_DIR = Path(__file__).resolve().parent.parent
-
-# Directorio donde se guardarán todos los libros
 PROJECTS_PATH = BASE_DIR / "projects"
-
-# Asegurarse de que el directorio de proyectos exista
 PROJECTS_PATH.mkdir(exist_ok=True)
+
+# --- Configuración del Cliente Groq ---
+if not GROQ_API_KEY:
+    print("❌ ADVERTENCIA: La variable de entorno GROQ_API_KEY no está configurada.")
+    groq_client = None
+else:
+    groq_client = Groq(api_key=GROQ_API_KEY)
+
+# --- Parámetros del Modelo de Lenguaje (Groq) ---
+MODEL = os.getenv("MODEL_NAME", "llama-3.1-70b-versatile")
+TEMPERATURE = float(os.getenv("TEMPERATURE", 0.7))
+MAX_TOKENS = int(os.getenv("MAX_TOKENS", 4096))
+TOP_P = float(os.getenv("TOP_P", 0.9))
+STOP_SEQUENCES_STR = os.getenv("STOP_SEQUENCES", "")
+STOP_SEQUENCES = [stop.strip() for stop in STOP_SEQUENCES_STR.split(',')] if STOP_SEQUENCES_STR else None
 

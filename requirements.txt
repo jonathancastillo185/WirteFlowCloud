@@ -1,8 +1,10 @@
 groq
 gradio
-reportlab
-markdown2
 python-dotenv
-numpy
-faiss-cpu
 ollama
+faiss-cpu
+markdown2
+reportlab
+openai
+requests
+Pillow
