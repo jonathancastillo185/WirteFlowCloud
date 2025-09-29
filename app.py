@@ -141,6 +141,7 @@ with gr.Blocks(theme=gr.themes.Soft(), title="BookWriter AI") as app:
         ("Aventura: Emilio Salgari", "Emilio Salgari"),
         ("Aventura: Alexandre Dumas", "Alexandre Dumas"),
         ("Aventura: J.K. Rowling", "J.K. Rowling"),
+        ("Aventura: Maria Elena Walsh", "Maria Elena Wcalsh"),
         # Romance
         ("Romance: Jane Austen", "Jane Austen"),
         ("Romance: Nicholas Sparks", "Nicholas Sparks"),
