@@ -1,6 +1,19 @@
-env
-venv
-.env
-/env
-/.env
+Entornos virtuales
+
+venv/
+.venv/
 env/
+.env
+Archivos de caché de Python
+
+pycache/
+*.pyc
+*.pyo
+*.pyd
+Directorio de proyectos generados
+
+/projects/
+Archivos de configuración de IDE
+
+.idea/
+.vscode/

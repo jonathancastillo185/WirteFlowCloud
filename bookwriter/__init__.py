@@ -1,0 +1,1 @@
+# Hace que 'bookwriter' sea un paquete de Python
