@@ -26,6 +26,10 @@ def update_status_display(status_dict: dict) -> str:
 # --- Funciones de Lógica de la Interfaz ---
 def load_project(project_name: str):
     """Carga un proyecto y actualiza todos los componentes de la UI."""
+    # CORRECCIÓN: Maneja el caso en que el input es una lista
+    if isinstance(project_name, list) and project_name:
+        project_name = project_name[0]
+        
     if not project_name:
         return "Selecciona un proyecto.", {}, "", "", "", "", None, gr.update(choices=get_project_list())
     print(f"Cargando proyecto: {project_name}...")
@@ -125,16 +129,13 @@ with gr.Blocks(theme=gr.themes.Soft(), title="BookWriter AI") as app:
     gr.Markdown("# 📚 BookWriter AI - Tu Asistente de Escritura Local")
 
     # --- LISTA DE AUTORES CORREGIDA PARA VISUALIZACIÓN ---
-    # El formato (Texto a mostrar, Valor a enviar) es el más robusto para multiselect.
     author_choices = [
-        # Terror
         ("Terror / Horror: Stephen King", "Stephen King"),
         ("Terror / Horror: H.P. Lovecraft", "H.P. Lovecraft"),
         ("Terror / Horror: Edgar Allan Poe", "Edgar Allan Poe"),
         ("Terror / Horror: Shirley Jackson", "Shirley Jackson"),
         ("Terror / Horror: Mary Shelley", "Mary Shelley"),
         ("Terror / Horror: Bram Stoker", "Bram Stoker"),
-        # Aventura
         ("Aventura: Jules Verne", "Jules Verne"),
         ("Aventura: Robert Louis Stevenson", "Robert Louis Stevenson"),
         ("Aventura: Jack London", "Jack London"),
@@ -142,44 +143,52 @@ with gr.Blocks(theme=gr.themes.Soft(), title="BookWriter AI") as app:
         ("Aventura: Alexandre Dumas", "Alexandre Dumas"),
         ("Aventura: J.K. Rowling", "J.K. Rowling"),
         ("Aventura: Maria Elena Walsh", "Maria Elena Wcalsh"),
-        # Romance
         ("Romance: Jane Austen", "Jane Austen"),
         ("Romance: Nicholas Sparks", "Nicholas Sparks"),
         ("Romance: Nora Roberts", "Nora Roberts"),
         ("Romance: Julia Quinn", "Julia Quinn"),
         ("Romance: Emily Brontë", "Emily Brontë"),
         ("Romance: Gabriel García Márquez", "Gabriel García Márquez"),
-        # Ciencia Ficción
         ("Ciencia Ficción: Isaac Asimov", "Isaac Asimov"),
         ("Ciencia Ficción: Philip K. Dick", "Philip K. Dick"),
         ("Ciencia Ficción: Ursula K. Le Guin", "Ursula K. Le Guin"),
         ("Ciencia Ficción: Frank Herbert", "Frank Herbert"),
         ("Ciencia Ficción: Arthur C. Clarke", "Arthur C. Clarke"),
-        # Fantasía
         ("Fantasía: J.R.R. Tolkien", "J.R.R. Tolkien"),
         ("Fantasía: George R.R. Martin", "George R.R. Martin"),
         ("Fantasía: Brandon Sanderson", "Brandon Sanderson"),
         ("Fantasía: Neil Gaiman", "Neil Gaiman"),
         ("Fantasía: C.S. Lewis", "C.S. Lewis"),
-        # Misterio / Thriller
         ("Misterio / Thriller: Agatha Christie", "Agatha Christie"),
         ("Misterio / Thriller: Arthur Conan Doyle", "Arthur Conan Doyle"),
         ("Misterio / Thriller: Gillian Flynn", "Gillian Flynn"),
         ("Misterio / Thriller: Raymond Chandler", "Raymond Chandler"),
-        # Clásicos / Literarios
         ("Clásicos / Literarios: Jorge Luis Borges", "Jorge Luis Borges"),
         ("Clásicos / Literarios: Ernest Hemingway", "Ernest Hemingway"),
         ("Clásicos / Literarios: Virginia Woolf", "Virginia Woolf"),
         ("Clásicos / Literarios: Fiodor Dostoievski", "Fiodor Dostoievski"),
-        # Filosofía / Ensayo
         ("Filosofía / Ensayo: Friedrich Nietzsche", "Friedrich Nietzsche"),
         ("Filosofía / Ensayo: Simone de Beauvoir", "Simone de Beauvoir"),
         ("Filosofía / Ensayo: Yuval Noah Harari", "Yuval Noah Harari"),
-        # Psicología / Auto-ayuda
         ("Psicología / Auto-ayuda: Carl Jung", "Carl Jung"),
         ("Psicología / Auto-ayuda: Jordan Peterson", "Jordan Peterson"),
         ("Psicología / Auto-ayuda: Brené Brown", "Brené Brown"),
         ("Psicología / Auto-ayuda: Mark Manson", "Mark Manson"),
+        ("Clasicos : Paulo Coelho", "Paulo Coelho"),
+        ("Clasicos : Miguel de Cervantes", "Miguel de Cervantes"),
+        ("Clasicos : Leo Tolstoy", "Leo Tolstoy"),
+        ("Clasicos : Mark Twain", "Mark Twain"),
+        ("Clasicos : Charles Dickens", "Charles Dickens"),
+        ("Clasicos : Victor Hugo", "Victor Hugo"),
+        ("Clasicos : Oscar Wilde", "Oscar Wilde"),
+        ("Clasicos : Alexandre Dumas", "Alexandre Dumas"),
+        ("Clasicos : Emily Brontë", "Emily Brontë"),
+        ("Clasicos : Herman Melville", "Herman Melville"),
+        ("Clasicos : Walt Whitman", "Walt Whitman"),
+        ("Clasicos : John Steinbeck", "John Steinbeck"),
+        ("Clasicos : Joseph Conrad", "Joseph Conrad"),
+        ("Clasicos : H.G. Wells", "H.G. Wells"),
+        ("Clasicos : Jorge Luis Borges", "Jorge Luis Borges"),
     ]
 
     with gr.Tab("🚀 Gestión de Proyectos"):
@@ -228,8 +237,14 @@ with gr.Blocks(theme=gr.themes.Soft(), title="BookWriter AI") as app:
             with gr.Column(scale=1):
                 cover_image_display = gr.Image(label="Portada Generada", type="filepath", interactive=False)
 
-    with gr.Tab("📖 Manuscrito Completo"):
-        book_display = gr.Markdown("Carga un proyecto para ver el manuscrito.")
+    with gr.Tab("📖 Manusrito Completo"):
+        book_display = gr.Textbox(
+            label="Manuscrito",
+            value="Carga un proyecto para ver el manuscrito.",
+            lines=30,
+            interactive=False,
+            show_copy_button=True
+        )
         refresh_book_btn = gr.Button("🔄 Actualizar Vista")
         
     with gr.Tab("🧠 Memoria del Proyecto"):
@@ -252,4 +267,3 @@ with gr.Blocks(theme=gr.themes.Soft(), title="BookWriter AI") as app:
 
 if __name__ == "__main__":
     app.launch()
-

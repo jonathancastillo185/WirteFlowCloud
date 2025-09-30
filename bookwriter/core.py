@@ -164,8 +164,12 @@ Actúa como un director de arte. Escribe un prompt detallado para un modelo de I
 - **Estilo:** {metadata.get('author_style', 'neutral')}
 - **Resumen:** {metadata.get('blurb', '')}
 - **Temas:** {', '.join(self.memory.get('plot', {}).get('themes', []))}
-**Instrucciones:** Describe la escena, personajes, atmósfera, estilo, iluminación y colores. Usa adjetivos potentes. Solo el prompt como respuesta.
-Ejemplo: "Pintura digital épica de un astronauta solitario al borde de un cañón marciano bajo un cielo carmesí. Estilo cinematográfico, alta resolución."
+**Instrucciones:**
+1. Describe la escena, personajes, atmósfera, estilo, iluminación y colores. Usa adjetivos potentes.
+2. **CRÍTICO: El prompt final DEBE ESTAR ESCRITO EN INGLÉS.** La IA de imagen solo entiende inglés.
+3. Responde únicamente con el texto del prompt.
+
+Ejemplo de salida en INGLÉS: "Epic digital painting of a lone astronaut on the edge of a Martian canyon under a crimson sky. Cinematic style, high resolution."
 """
         cover_prompt = self._call_groq(prompt_for_prompt)
         self.memory['metadata']['cover_prompt'] = cover_prompt
