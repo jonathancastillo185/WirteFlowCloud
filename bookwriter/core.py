@@ -11,7 +11,10 @@ from .config import (
 )
 from .pdf_exporter import export_book_to_pdf
 from .semantic_memory import SemanticMemory
-from .image_generator import generate_image_with_stability
+# --- IMPORTACIÓN MODIFICADA ---
+# Se importa la nueva función para crear portadas compuestas
+from .image_generator import create_composite_cover
+
 
 class BookWriter:
     # --- FUNCIÓN __INIT__ MODIFICADA ---
@@ -152,30 +155,54 @@ Actúa como un editor experto. Escribe un resumen de contraportada (blurb) intri
         self.save_memory()
         return blurb
 
+    # --- MÉTODO DE GENERACIÓN DE PORTADA ACTUALIZADO ---
     def generate_cover_art(self) -> tuple[str | None, str, str]:
-        print("✍️ Generando prompt artístico para la portada...")
+        print("✍️ Generando prompts artísticos para la portada...")
         metadata = self.memory.get('metadata', {})
         if not metadata.get('blurb'):
             self.generate_book_blurb()
             metadata['blurb'] = self.memory['metadata']['blurb']
-        prompt_for_prompt = f"""
-Actúa como un director de arte. Escribe un prompt detallado para un modelo de IA de texto a imagen.
+
+        # --- Prompt para la IMAGEN PRINCIPAL (paisaje, abstracto, etc.) ---
+        prompt_for_main_image = f"""
+Actúa como un director de arte especializado en portadas de libros de estilo clásico.
+Basado en los siguientes detalles, crea un prompt para un modelo de IA de texto a imagen.
 - **Título:** {metadata.get('title', 'Sin Título')}
-- **Estilo:** {metadata.get('author_style', 'neutral')}
+- **Estilo de Autor:** {metadata.get('author_style', 'neutral')}
 - **Resumen:** {metadata.get('blurb', '')}
 - **Temas:** {', '.join(self.memory.get('plot', {}).get('themes', []))}
 **Instrucciones:**
-1. Describe la escena, personajes, atmósfera, estilo, iluminación y colores. Usa adjetivos potentes.
-2. **CRÍTICO: El prompt final DEBE ESTAR ESCRITO EN INGLÉS.** La IA de imagen solo entiende inglés.
-3. Responde únicamente con el texto del prompt.
+1.  Describe una escena evocadora, un paisaje onírico o una pieza de arte abstracto que capture la esencia de la historia.
+2.  El estilo debe ser similar a una pintura al óleo clásica, arte digital épico o acuarela atmosférica.
+3.  Usa adjetivos potentes para la iluminación, colores y atmósfera.
+4.  **CRÍTICO: El prompt final DEBE ESTAR ESCRITO EN INGLÉS.**
+5.  Responde únicamente con el texto del prompt.
 
-Ejemplo de salida en INGLÉS: "Epic digital painting of a lone astronaut on the edge of a Martian canyon under a crimson sky. Cinematic style, high resolution."
+Ejemplo de salida: "Epic oil painting of a lone figure standing on a cliff overlooking a stormy sea, dramatic lighting, muted colors, style of Turner."
 """
-        cover_prompt = self._call_groq(prompt_for_prompt)
-        self.memory['metadata']['cover_prompt'] = cover_prompt
+        main_image_prompt = self._call_groq(prompt_for_main_image)
+        self.memory['metadata']['cover_prompt'] = main_image_prompt # Guardamos el prompt principal
+        
+        # --- Prompt para el MARCO (más estático) ---
+        frame_prompt = (
+            "An ornate, antique book cover frame in dark leather and carved wood. "
+            "Intricate gold and silver filigree details in the corners. The center is completely transparent. "
+            "Subtle realistic shadows. Photorealistic, 8k, cinematic lighting. "
+            "The frame should look ancient and magical. 2:3 aspect ratio."
+        )
+
         self.save_memory()
-        image_path, status = generate_image_with_stability(cover_prompt, str(self.cover_file))
-        return image_path, cover_prompt, status
+
+        # Llamar a la nueva función de composición
+        # Pasamos el project_path para que guarde las imágenes temporales allí
+        image_path, status = create_composite_cover(
+            main_prompt=main_image_prompt,
+            frame_prompt=frame_prompt,
+            final_output_path=str(self.cover_file),
+            temp_folder=str(self.project_path)
+        )
+
+        return image_path, main_image_prompt, status
     
     def write_full_book(self) -> Generator[Tuple[float, str], None, None]:
         total_pages = sum(chap.get('pages_estimate', 10) for chap in self.memory.get('plot', {}).get('outline', []))
@@ -195,6 +222,8 @@ Ejemplo de salida en INGLÉS: "Epic digital painting of a lone astronaut on the 
                 return
             pages_written += 1
             yield (pages_written / total_pages, progress_message)
+            print("🕒 Pausa de 10 segundos antes de generar la siguiente página...")
+            time.sleep(10)
         yield (1.0, "✅ ¡Libro completado!")
 
     def generate_page(self) -> Tuple[str, str]:
@@ -217,24 +246,28 @@ Ejemplo de salida en INGLÉS: "Epic digital painting of a lone astronaut on the 
         
         query = last_written_text or chapter_info.get('summary', '')
         relevant_context = self.semantic_memory.search_relevant_context(query)
-        
+
         prompt = f"""
-**REGLAS CRÍTICAS:**
-1. **FIDELIDAD ABSOLUTA A LOS PERSONAJES:** Usa los perfiles del Punto 1 EXACTAMENTE. NO puedes cambiar nombres o personalidades.
-2. **NO REPETIR:** Continúa la historia desde el "ÚLTIMO FRAGMENTO ESCRITO".
----
-**1. PERFILES DE PERSONAJES:**
-{character_focus_str}
-**2. RESUMEN DEL CAPÍTULO (Nº {chapter_info.get('number', 'N/A')}: "{chapter_info.get('title', 'Sin Título')}")**:
-{chapter_info.get('summary', '')}
-**3. CONTEXTO DE CAPÍTULOS ANTERIORES:**
-{relevant_context}
-**4. ÚLTIMO FRAGMENTO ESCRITO:**
-...{last_written_text}
----
-**TU TAREA:** Continúa la novela desde el final del "ÚLTIMO FRAGMENTO ESCRITO". Sigue las REGLAS y la trama. Escribe 400-500 palabras. No incluyas un título.
-"""
+    Se te proporciona el siguiente contexto para escribir una novela al estilo de {self.memory.get('metadata', {}).get('author_style', 'neutral')}.
+
+    ---
+    **1. PERFILES DE PERSONAJES (DE USO OBLIGATORIO):**
+    {character_focus_str}
+
+    **2. RESUMEN DEL CAPÍTULO ACTUAL (Nº {chapter_info.get('number', 'N/A')}: "{chapter_info.get('title', 'Sin Título')}")**:
+    {chapter_info.get('summary', '')}
+
+    **3. CONTEXTO IMPORTANTE DE CAPÍTULO ANTERIOR:**
+    {relevant_context}
+
+    **4. ÚLTIMO FRAGMENTO ESCRITO (Continúa desde aquí):**
+    ...{last_written_text}
+    ---
+
+    **TU TAREA:** Escribe las siguientes 400-500 palabras de la novela. **Utiliza OBLIGATORIAMENTE los perfiles de personaje, el resumen del capítulo y el contexto proporcionado arriba para continuar la historia.** No escribas un título de capítulo. Empieza a escribir directamente, continuando la narración desde el "ÚLTIMO FRAGMENTO ESCRITO".
+    """
         page_content = self._call_groq(prompt)
+        
         if "Error" in page_content:
             return page_content, ""
 
@@ -312,4 +345,3 @@ Responde en JSON: {{"character_updates": {{"Nombre": "Nuevo estado."}}}}
             "blurb": status_data.get('blurb',''), "cover_prompt": status_data.get('cover_prompt',''),
             "cover_path": str(self.cover_file) if self.cover_file.exists() else None
         }
-
