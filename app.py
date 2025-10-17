@@ -209,6 +209,7 @@ with gr.Blocks(theme=gr.themes.Soft(), title="BookWriter AI") as app:
     ("Clásicos / Literarios: Victor Hugo", "Victor Hugo"),
     ("Clásicos / Literarios: Virginia Woolf", "Virginia Woolf"),
     ("Clásicos / Literarios: Walt Whitman", "Walt Whitman"),
+    ("Clásicos / Literarios: Haruki Murakami", 'Haruki Murakami'),
 
     # --- Ensayo / No Ficción ---
     ("Filosofía / Ensayo: Friedrich Nietzsche", "Friedrich Nietzsche"),

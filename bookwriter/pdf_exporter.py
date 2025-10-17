@@ -11,8 +11,8 @@ import markdown2
 
 def export_book_to_pdf(pdf_path: str, book_file_path: str, memory: dict) -> str:
     """
-    Exporta el manuscrito a un PDF profesional convirtiendo el Markdown a un formato
-    que ReportLab puede interpretar, solucionando problemas de formato como negritas y cursivas.
+    Exporta el manuscrito a un PDF profesional, asegurando la correcta generación
+    del índice de contenidos.
     """
     if not os.path.exists(book_file_path):
         return "❌ No hay un manuscrito para exportar. Escribe algunas páginas primero."
@@ -32,6 +32,7 @@ def export_book_to_pdf(pdf_path: str, book_file_path: str, memory: dict) -> str:
         chapter_title_style = ParagraphStyle(name='ChapterTitle', parent=styles['h2'], fontSize=18, spaceBefore=20, spaceAfter=12, keepWithNext=1, textColor=colors.darkblue)
         body_style = ParagraphStyle(name='BodyText', parent=styles['Normal'], fontSize=11, alignment=TA_JUSTIFY, firstLineIndent=1*cm, leading=14, spaceAfter=6)
         blurb_style = ParagraphStyle(name='BlurbText', parent=body_style, fontSize=12, alignment=TA_LEFT, firstLineIndent=0, leading=16, spaceBefore=12, spaceAfter=12, leftIndent=1*cm, rightIndent=1*cm, borderColor=colors.black, borderPadding=10)
+        toc_entry_style = ParagraphStyle(name='TOCEntry', parent=styles['Normal'], fontSize=12, leftIndent=1*cm, firstLineIndent=0, spaceBefore=4, spaceAfter=4)
 
         story = []
         metadata = memory.get('metadata', {})
@@ -51,7 +52,7 @@ def export_book_to_pdf(pdf_path: str, book_file_path: str, memory: dict) -> str:
         # 2. Índice de Contenidos
         story.append(Paragraph("Índice de Contenidos", toc_title_style))
         toc = TableOfContents()
-        toc.tableStyle = TableStyle([('ALIGN', (0,0), (-1,-1), 'LEFT'), ('FONT_NAME', (0,0), (-1,-1), 'Helvetica'), ('FONT_SIZE', (0,0), (-1,-1), 12), ('BOTTOMPADDING', (0,0), (-1,-1), 6)])
+        toc.levelStyles = [toc_entry_style]
         story.append(toc)
         story.append(PageBreak())
 
@@ -62,12 +63,13 @@ def export_book_to_pdf(pdf_path: str, book_file_path: str, memory: dict) -> str:
                 if not stripped_line:
                     continue
 
-                if stripped_line.startswith('## '):
-                    title_text = stripped_line.lstrip('## ').strip()
+                # --- LÓGICA CORREGIDA ---
+                # Ahora usamos .lstrip() para quitar los '##' y luego .strip() de nuevo
+                # para eliminar cualquier espacio o carácter invisible que haya quedado.
+                if stripped_line.startswith('##'):
+                    title_text = stripped_line.lstrip('#').strip()
                     p_title = Paragraph(f'<a name="{title_text.replace(" ", "_")}"/>{title_text}', chapter_title_style)
-                    # --- LÍNEA ERRÓNEA ELIMINADA ---
-                    # La siguiente línea causaba el error y ha sido removida.
-                    # p_title.setStyle(styles['h2']) 
+                    p_title.toc_level = 0
                     story.append(p_title)
                 else:
                     html_line = markdown2.markdown(stripped_line)

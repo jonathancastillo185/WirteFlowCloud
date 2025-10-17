@@ -11,13 +11,10 @@ from .config import (
 )
 from .pdf_exporter import export_book_to_pdf
 from .semantic_memory import SemanticMemory
-# --- IMPORTACIÓN MODIFICADA ---
-# Se importa la nueva función para crear portadas compuestas
 from .image_generator import create_composite_cover
 
 
 class BookWriter:
-    # --- FUNCIÓN __INIT__ MODIFICADA ---
     def __init__(self, project_name: str, author_style: Union[str, List[str]] = "neutral"):
         self.project_name = self._sanitize_name(project_name)
         self.project_path = PROJECTS_PATH / self.project_name
@@ -38,7 +35,6 @@ class BookWriter:
         self.load_memory()
 
     def _get_initial_memory(self, project_name, author_style):
-        # ... (el resto del archivo no necesita cambios)
         return {
             "metadata": {
                 "title": project_name, "author_style": author_style,
@@ -71,15 +67,25 @@ class BookWriter:
                     print(f"Advertencia: El archivo memory.json para {self.project_name} está corrupto.")
 
     def _build_consistency_prompt(self) -> str:
+        """Prompt del sistema mejorado para escritura más directa"""
         plot_data = self.memory.get('plot', {})
         return f"""Eres un escritor experto en el estilo de {self.memory.get('metadata', {}).get('author_style', 'neutral')}.
-Tu tarea es escribir una novela manteniendo una consistencia absoluta.
-Respeta los detalles del mundo, las personalidades de los personajes y la trama establecida.
----
-**Título:** {self.memory.get('metadata', {}).get('title', 'Sin Título')}
-**Premisa:** {plot_data.get('premise', 'No especificada')}
-**Temas:** {', '.join(plot_data.get('themes', []))}
----"""
+Tu tarea es escribir una novela con prosa CLARA y DIRECTA que prioriza el avance de la trama sobre las descripciones elaboradas.
+
+**REGLAS DE ESTILO FUNDAMENTALES:**
+- Usa lenguaje sencillo y accesible, evita la prosa púrpura
+- Prioriza acción y diálogo sobre descripción
+- Cada párrafo debe avanzar la historia
+- Mantén un ritmo ágil con párrafos cortos
+- Las descripciones deben ser breves y funcionales
+- Evita metáforas complejas o comparaciones rebuscadas
+
+**INFORMACIÓN DE LA NOVELA:**
+- Título: {self.memory.get('metadata', {}).get('title', 'Sin Título')}
+- Premisa: {plot_data.get('premise', 'No especificada')}
+- Temas: {', '.join(plot_data.get('themes', []))}
+
+Recuerda: CLARIDAD y AVANCE DE LA TRAMA son las prioridades."""
 
     def _call_groq(self, user_prompt: str) -> str:
         max_retries = 5
@@ -110,6 +116,7 @@ Respeta los detalles del mundo, las personalidades de los personajes y la trama 
         return f"Error: No se pudo completar la llamada a Groq tras {max_retries} reintentos."
 
     def generate_outline(self, premise: str, num_chapters: int, themes: str):
+        """Genera el outline con instrucciones para una trama más dinámica"""
         self.memory['plot']['premise'] = premise
         self.memory['plot']['themes'] = [theme.strip() for theme in themes.split(',')]
         prompt = f"""
@@ -117,13 +124,16 @@ Basado en la siguiente premisa, temas y estilo, genera un outline detallado para
 **Premisa:** {premise}
 **Temas:** {themes}
 **Estilo Sugerido:** {self.memory['metadata']['author_style']}
+
+IMPORTANTE: La novela debe tener un ritmo ágil con eventos concretos y giros de trama frecuentes. Evita capítulos de pura ambientación.
+
 Tu respuesta DEBE ser un único JSON válido con la siguiente estructura:
 {{
     "world": {{"setting": "...", "time_period": "...", "key_locations": {{}}, "rules_of_the_world": []}},
-    "characters": {{"Nombre": {{"description": "...", "personality": "...", "story_arc": "...", "relationships": "..."}}}},
-    "style": {{"tone": "...", "point_of_view": "...", "tense": "..."}},
-    "plot": {{"outline": [{{"number": 1, "title": "...", "summary": "...", "key_events": [], "character_focus": [], "pages_estimate": 10}}]}},
-    "consistency_rules": []
+    "characters": {{"Nombre": {{"description": "Descripción BREVE y concreta", "personality": "Rasgos principales", "story_arc": "Evolución del personaje", "relationships": "Conexiones clave"}}}},
+    "style": {{"tone": "directo y claro", "point_of_view": "...", "tense": "..."}},
+    "plot": {{"outline": [{{"number": 1, "title": "...", "summary": "Eventos CONCRETOS que suceden", "key_events": ["evento1", "evento2"], "character_focus": [], "pages_estimate": 10}}]}},
+    "consistency_rules": ["Mantener prosa clara", "Priorizar acción sobre descripción", "Diálogos naturales y con propósito"]
 }}
 """
         response = self._call_groq(prompt)
@@ -148,14 +158,13 @@ Actúa como un editor experto. Escribe un resumen de contraportada (blurb) intri
 - **Estilo:** {metadata.get('author_style', 'neutral')}
 - **Premisa:** {plot_data.get('premise', '')}
 - **Temas:** {', '.join(plot_data.get('themes', []))}
-**Instrucciones:** Tono acorde al género. No reveles el final. 150-200 palabras. Responde solo con el texto del resumen.
+**Instrucciones:** Tono directo y atrapante. No reveles el final. 150-200 palabras. Responde solo con el texto del resumen.
 """
         blurb = self._call_groq(prompt)
         self.memory['metadata']['blurb'] = blurb
         self.save_memory()
         return blurb
 
-    # --- MÉTODO DE GENERACIÓN DE PORTADA ACTUALIZADO ---
     def generate_cover_art(self) -> tuple[str | None, str, str]:
         print("✍️ Generando prompts artísticos para la portada...")
         metadata = self.memory.get('metadata', {})
@@ -163,7 +172,6 @@ Actúa como un editor experto. Escribe un resumen de contraportada (blurb) intri
             self.generate_book_blurb()
             metadata['blurb'] = self.memory['metadata']['blurb']
 
-        # --- Prompt para la IMAGEN PRINCIPAL (paisaje, abstracto, etc.) ---
         prompt_for_main_image = f"""
 Actúa como un director de arte especializado en portadas de libros de estilo clásico.
 Basado en los siguientes detalles, crea un prompt para un modelo de IA de texto a imagen.
@@ -177,13 +185,10 @@ Basado en los siguientes detalles, crea un prompt para un modelo de IA de texto 
 3.  Usa adjetivos potentes para la iluminación, colores y atmósfera.
 4.  **CRÍTICO: El prompt final DEBE ESTAR ESCRITO EN INGLÉS.**
 5.  Responde únicamente con el texto del prompt.
-
-Ejemplo de salida: "Epic oil painting of a lone figure standing on a cliff overlooking a stormy sea, dramatic lighting, muted colors, style of Turner."
 """
         main_image_prompt = self._call_groq(prompt_for_main_image)
-        self.memory['metadata']['cover_prompt'] = main_image_prompt # Guardamos el prompt principal
+        self.memory['metadata']['cover_prompt'] = main_image_prompt
         
-        # --- Prompt para el MARCO (más estático) ---
         frame_prompt = (
             "An ornate, antique book cover frame in dark leather and carved wood. "
             "Intricate gold and silver filigree details in the corners. The center is completely transparent. "
@@ -193,8 +198,6 @@ Ejemplo de salida: "Epic oil painting of a lone figure standing on a cliff overl
 
         self.save_memory()
 
-        # Llamar a la nueva función de composición
-        # Pasamos el project_path para que guarde las imágenes temporales allí
         image_path, status = create_composite_cover(
             main_prompt=main_image_prompt,
             frame_prompt=frame_prompt,
@@ -227,6 +230,7 @@ Ejemplo de salida: "Epic oil painting of a lone figure standing on a cliff overl
         yield (1.0, "✅ ¡Libro completado!")
 
     def generate_page(self) -> Tuple[str, str]:
+        """Método principal mejorado para generar páginas con estilo más directo"""
         progress = self.memory.get('writing_progress', {})
         outline = self.memory.get('plot', {}).get('outline', [])
         current_chapter_index = progress.get('current_chapter_index', 0)
@@ -237,45 +241,95 @@ Ejemplo de salida: "Epic oil painting of a lone figure standing on a cliff overl
         page_in_chapter = progress.get('current_page_in_chapter', 0) + 1
         total_pages = chapter_info.get('pages_estimate', 10)
         
-        char_profiles = [f"- **{name}:** {self.memory.get('characters',{}).get(name,{}).get('description','')} Personalidad: {self.memory.get('characters',{}).get(name,{}).get('personality','')} Estado: {self.memory.get('characters',{}).get(name,{}).get('current_state','')}" for name in chapter_info.get('character_focus', [])]
+        # Preparar información de personajes de forma concisa
+        char_profiles = []
+        for name in chapter_info.get('character_focus', []):
+            char_data = self.memory.get('characters', {}).get(name, {})
+            char_profiles.append(
+                f"- **{name}:** {char_data.get('description', '')} "
+                f"Estado actual: {char_data.get('current_state', '')}"
+            )
         character_focus_str = "\n".join(char_profiles) if char_profiles else "No hay personajes específicos en foco."
         
+        # Obtener el último texto escrito
         last_written_text = ""
         if self.book_file.exists():
-            with open(self.book_file, 'r', encoding='utf-8') as f: last_written_text = f.read()[-1500:]
+            with open(self.book_file, 'r', encoding='utf-8') as f: 
+                last_written_text = f.read()[-1500:]
         
+        # Obtener contexto relevante
         query = last_written_text or chapter_info.get('summary', '')
         relevant_context = self.semantic_memory.search_relevant_context(query)
-
+        
+        # PROMPT MEJORADO PARA ESTILO DIRECTO
         prompt = f"""
-    Se te proporciona el siguiente contexto para escribir una novela al estilo de {self.memory.get('metadata', {}).get('author_style', 'neutral')}.
+Eres un novelista escribiendo en el estilo de {self.memory.get('metadata', {}).get('author_style', 'neutral')}.
+Tu objetivo es escribir una narrativa CLARA, DIRECTA y ABSORBENTE que mantenga al lector enganchado con la TRAMA.
 
-    ---
-    **1. PERFILES DE PERSONAJES (DE USO OBLIGATORIO):**
-    {character_focus_str}
+---
+**CONTEXTO DE LA HISTORIA:**
 
-    **2. RESUMEN DEL CAPÍTULO ACTUAL (Nº {chapter_info.get('number', 'N/A')}: "{chapter_info.get('title', 'Sin Título')}")**:
-    {chapter_info.get('summary', '')}
+**1. PERSONAJES EN ESTA ESCENA:**
+{character_focus_str}
 
-    **3. CONTEXTO IMPORTANTE DE CAPÍTULO ANTERIOR:**
-    {relevant_context}
+**2. CAPÍTULO ACTUAL (Nº {chapter_info.get('number', 'N/A')}: "{chapter_info.get('title', 'Sin Título')}")**:
+Eventos que deben ocurrir: {chapter_info.get('summary', '')}
 
-    **4. ÚLTIMO FRAGMENTO ESCRITO (Continúa desde aquí):**
-    ...{last_written_text}
-    ---
+**3. CONTEXTO PREVIO IMPORTANTE:**
+{relevant_context if relevant_context else "Inicio del capítulo"}
 
-    **TU TAREA:** Escribe las siguientes 400-500 palabras de la novela. **Utiliza OBLIGATORIAMENTE los perfiles de personaje, el resumen del capítulo y el contexto proporcionado arriba para continuar la historia.** No escribas un título de capítulo. Empieza a escribir directamente, continuando la narración desde el "ÚLTIMO FRAGMENTO ESCRITO".
-    """
+**4. ÚLTIMO FRAGMENTO ESCRITO (Continúa DIRECTAMENTE desde aquí):**
+...{last_written_text if last_written_text else "[INICIO DEL CAPÍTULO]"}
+---
+
+**INSTRUCCIONES CRÍTICAS DE ESTILO:**
+
+1. **LENGUAJE CLARO Y DIRECTO:**
+   - Oraciones simples y contundentes
+   - Vocabulario accesible pero preciso
+   - EVITA: metáforas elaboradas, comparaciones poéticas, lenguaje florido
+   
+2. **ESTRUCTURA DE LA ESCENA:**
+   - Comienza con acción o diálogo, NO con descripción
+   - Cada párrafo debe tener máximo 3-4 oraciones
+   - Alterna acción, diálogo y descripción mínima
+
+3. **EJEMPLOS DE ESTILO:**
+   ❌ MALO: "La luz dorada del atardecer se filtraba como miel líquida a través de las cortinas, bañando la habitación en un resplandor etéreo"
+   ✅ BUENO: "El sol se ponía. La habitación se llenó de luz naranja."
+   
+   ❌ MALO: "Sus ojos, pozos sin fondo de dolor ancestral, reflejaban el peso de mil vidas"
+   ✅ BUENO: "Lo miró con cansancio. Había visto demasiado."
+
+4. **DIÁLOGOS:**
+   - Naturales y con propósito claro
+   - Revelan información o avanzan la trama
+   - Sin discursos filosóficos largos
+
+5. **RITMO:**
+   - Si no pasa algo importante, sáltalo
+   - Transiciones rápidas entre escenas
+   - Enfoque en conflicto y resolución
+
+**TAREA:** 
+Escribe las siguientes 400-500 palabras. 
+Continúa DIRECTAMENTE desde el último fragmento.
+Enfócate en QUÉ SUCEDE, no en descripciones atmosféricas.
+Haz que PASEN COSAS. Que los personajes ACTÚEN y HABLEN.
+"""
+        
         page_content = self._call_groq(prompt)
         
         if "Error" in page_content:
             return page_content, ""
 
+        # Guardar el contenido generado
         with open(self.book_file, 'a', encoding='utf-8') as f:
             if page_in_chapter == 1:
                 f.write(f"\n\n## Capítulo {chapter_info.get('number', 'N/A')}: {chapter_info.get('title', 'Sin Título')}\n\n")
             f.write(f"{page_content}\n")
         
+        # Actualizar progreso
         if page_in_chapter >= total_pages:
             self._process_completed_chapter(chapter_info)
             self._update_after_chapter_completion(chapter_info, page_content)
@@ -283,10 +337,12 @@ Ejemplo de salida: "Epic oil painting of a lone figure standing on a cliff overl
             self.memory['writing_progress']['current_page_in_chapter'] = 0
         else:
             self.memory['writing_progress']['current_page_in_chapter'] = page_in_chapter
+        
         self.save_memory()
         return f"✅ Página {page_in_chapter}/{total_pages} del Cap. {chapter_info.get('number', 'N/A')} generada.", page_content
-
+    
     def _process_completed_chapter(self, chapter_info: dict):
+        """Procesa y guarda el capítulo completado en la memoria semántica"""
         print(f"Finalizando capítulo {chapter_info.get('number', 'N/A')}. Indexando...")
         try:
             full_book_content = self.book_file.read_text(encoding='utf-8')
@@ -302,10 +358,13 @@ Ejemplo de salida: "Epic oil painting of a lone figure standing on a cliff overl
             print(f"❌ Error al procesar capítulo para memoria semántica: {e}")
 
     def _update_after_chapter_completion(self, chapter_info, full_chapter_content):
+        """Actualiza el estado de los personajes después de completar un capítulo"""
         prompt = f"""
-Analiza el contenido del capítulo "{chapter_info.get('title', 'Sin Título')}" y describe el nuevo estado de los personajes.
-Contenido: --- {full_chapter_content[-2000:]} ---
-Responde en JSON: {{"character_updates": {{"Nombre": "Nuevo estado."}}}}
+Analiza BREVEMENTE el contenido del capítulo y describe el nuevo estado de los personajes.
+Contenido: {full_chapter_content[-2000:]}
+
+Responde en JSON con estados CONCISOS (máximo 1 línea por personaje):
+{{"character_updates": {{"Nombre": "Estado actual breve"}}}}
 """
         response = self._call_groq(prompt)
         try:
@@ -314,34 +373,54 @@ Responde en JSON: {{"character_updates": {{"Nombre": "Nuevo estado."}}}}
             for char, state in updates.items():
                 if char in self.memory.get('characters', {}):
                     self.memory['characters'][char]['current_state'] = state
-                    print(f"🔄 Estado de '{char}' actualizado a: {state}")
+                    print(f"🔄 Estado de '{char}' actualizado")
         except Exception as e:
             print(f"⚠️ No se pudo actualizar estado de personajes: {e}")
-        summary = {"number": chapter_info.get('number',0), "title": chapter_info.get('title',''), "summary": chapter_info.get('summary','')}
+        
+        summary = {
+            "number": chapter_info.get('number', 0), 
+            "title": chapter_info.get('title', ''), 
+            "summary": chapter_info.get('summary', '')
+        }
         self.memory.setdefault('chapters_summary', []).append(summary)
 
     def export_to_pdf(self) -> str:
+        """Exporta el libro a PDF"""
         if not self.memory.get('metadata', {}).get('blurb'):
             self.generate_book_blurb()
-        return export_book_to_pdf(pdf_path=str(self.pdf_file), book_file_path=str(self.book_file), memory=self.memory)
+        return export_book_to_pdf(
+            pdf_path=str(self.pdf_file), 
+            book_file_path=str(self.book_file), 
+            memory=self.memory
+        )
     
     def get_status(self) -> dict:
+        """Obtiene el estado actual del proyecto"""
         progress = self.memory.get('writing_progress', {})
         outline = self.memory.get('plot', {}).get('outline', [])
         total_chapters = len(outline)
         current_idx = progress.get('current_chapter_index', 0)
-        if total_chapters == 0: return {"message": "Aún no se ha generado un outline."}
+        
+        if total_chapters == 0: 
+            return {"message": "Aún no se ha generado un outline."}
+        
         is_completed = current_idx >= total_chapters
         info = outline[current_idx] if not is_completed else {"number": "N/A", "title": "Libro completado"}
         page, total_pages = (progress.get('current_page_in_chapter', 0) + 1, info.get('pages_estimate', 10)) if not is_completed else (0, 0)
         
-        status_data = self.memory.get('metadata',{})
+        status_data = self.memory.get('metadata', {})
         return {
-            "title": status_data.get('title',''), "style": status_data.get('author_style',''),
-            "total_chapters": total_chapters, "current_chapter_number": info.get('number'),
-            "current_chapter_title": info.get('title'), "current_page": page,
-            "pages_in_chapter": total_pages, "characters": len(self.memory.get('characters',{})),
-            "completed": is_completed, "ollama_status": self.semantic_memory.is_available,
-            "blurb": status_data.get('blurb',''), "cover_prompt": status_data.get('cover_prompt',''),
+            "title": status_data.get('title', ''), 
+            "style": status_data.get('author_style', ''),
+            "total_chapters": total_chapters, 
+            "current_chapter_number": info.get('number'),
+            "current_chapter_title": info.get('title'), 
+            "current_page": page,
+            "pages_in_chapter": total_pages, 
+            "characters": len(self.memory.get('characters', {})),
+            "completed": is_completed, 
+            "ollama_status": self.semantic_memory.is_available,
+            "blurb": status_data.get('blurb', ''), 
+            "cover_prompt": status_data.get('cover_prompt', ''),
             "cover_path": str(self.cover_file) if self.cover_file.exists() else None
         }
